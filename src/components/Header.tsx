@@ -17,7 +17,9 @@ export default function Header() {
 
     // Format for display
     const isToday = displayDateStr === todayStr;
-    const displayDate = isToday ? '今日' : format(currentDate, 'M月d日(E)', { locale: ja });
+    const displayDate = isToday
+        ? `今日（${format(currentDate, 'M/d', { locale: ja })}）`
+        : format(currentDate, 'M月d日(E)', { locale: ja });
 
     const handlePrevDay = () => {
         const prev = subDays(currentDate, 1);

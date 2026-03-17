@@ -4,27 +4,30 @@ import { NextResponse } from 'next/server';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTION = `
-あなたは優秀な管理栄養士AIです。
-ユーザーから追加の情報（回答）が提供されました。
-元の推定栄養素データと、ユーザーの回答を踏まえて、数値を再計算し、JSON形式で出力してください。
+あなたは優秀な管理栄養士AIアシスタントです。
+ユーザーから食事に関する質問や追加情報が提供されます。
+以下の点を踏まえて、自然な会話形式で回答しつつ、栄養素データを再計算してください。
 
 必須出力フォーマット（JSON）:
 {
+  "message": string, // ユーザーへの返答メッセージ（日本語・自然な会話形式）
   "calories": number, // kcal
   "protein": number,  // g
   "fat": number,      // g
   "carbs": number,    // g
   "salt": number,     // g
   "fiber": number,    // g
-  "name": string,     // 食事の短い名前
-  "questions": string | null // 今回の回答で全てクリアになった場合は null。まだ計算に必要な情報が足りない場合のみ質問を記述。
+  "name": string,     // 食事の短い名前（変更がなければ元の名前）
+  "questions": string | null // 追加の確認が必要な場合のみ質問文。不要な場合は null。
 }
+
+messageには必ず何か返答を入れてください。例：「修正しました！カロリーは約350kcalになります。」「おそらく妥当な数値だと思います。」
 `;
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { previousData, previousQuestion, userReply } = body;
+        const { previousData, previousQuestion, userReply, mealName, chatHistory } = body;
 
         if (!previousData || !userReply) {
             return NextResponse.json(
@@ -33,17 +36,26 @@ export async function POST(request: Request) {
             );
         }
 
+        // Build chat history context
+        const historyText = chatHistory
+            ? chatHistory.map((m: { role: string; text: string }) =>
+                `${m.role === 'ai' ? 'AI' : 'ユーザー'}: ${m.text}`
+            ).join('\n')
+            : '';
+
         const prompt = `
-【元の推定データ】
+【食事名】
+${mealName || '不明'}
+
+【現在の推定栄養素データ】
 ${JSON.stringify(previousData)}
 
-【AIの質問】
-${previousQuestion || '（質問なし）'}
-
-【ユーザーの回答】
+${previousQuestion ? `【前回のAIの質問】\n${previousQuestion}\n` : ''}
+${historyText ? `【会話履歴】\n${historyText}\n` : ''}
+【最新のユーザーメッセージ】
 ${userReply}
 
-上記を踏まえて栄養素を再計算してください。
+上記を踏まえて回答し、栄養素データを更新してください。
 `;
 
         const response = await ai.models.generateContent({
@@ -52,7 +64,7 @@ ${userReply}
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION,
                 responseMimeType: 'application/json',
-                temperature: 0.1,
+                temperature: 0.2,
             }
         });
 

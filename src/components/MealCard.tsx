@@ -13,7 +13,6 @@ type Props = {
 };
 
 export default function MealCard({ mealType, meal, onEdit, onUpdate }: Props) {
-    const showChat = meal.status === 'needs_clarification' && meal.questions;
     const [isEditing, setIsEditing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -177,12 +176,9 @@ export default function MealCard({ mealType, meal, onEdit, onUpdate }: Props) {
                     </div>
                 </div>
             </div>
-
-            {showChat && meal.questions && (
-                <div className="mt-3">
-                    <ClarificationChat meal={meal} onComplete={onUpdate} />
-                </div>
-            )}
+            <div className="mt-3">
+                <ClarificationChat meal={meal} onComplete={onUpdate} />
+            </div>
         </div>
     );
 }
