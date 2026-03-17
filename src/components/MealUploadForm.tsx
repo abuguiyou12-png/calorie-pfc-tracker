@@ -2,7 +2,7 @@
 
 import { Camera, Image as ImageIcon, Send, X, Clock } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { fileToBase64, uploadMealImage } from '@/lib/storage';
+import { compressImage, uploadMealImage } from '@/lib/storage';
 import { saveMealRecord, getMealsByDateRange, MealRecord } from '@/lib/db/meals';
 import { format, subDays } from 'date-fns';
 
@@ -104,7 +104,7 @@ export default function MealUploadForm({ mealType, selectedDate, onCancel, onSuc
         try {
             let imageBase64 = '';
             if (file) {
-                imageBase64 = await fileToBase64(file);
+                imageBase64 = await compressImage(file);
             }
 
             // 1. Analyze with Gemini
