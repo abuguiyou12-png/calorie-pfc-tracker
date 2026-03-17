@@ -1,13 +1,10 @@
 'use client';
 
 import { Sparkles, Send, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MealRecord, updateMealRecord } from '@/lib/db/meals';
 
-type Message = {
-    role: 'ai' | 'user';
-    text: string;
-};
+type Message = { role: 'ai' | 'user'; text: string };
 
 type Props = {
     meal: MealRecord;
@@ -15,19 +12,32 @@ type Props = {
 };
 
 export default function ClarificationChat({ meal, onComplete }: Props) {
-    // Build initial messages from meal data
+    // Initialize from persisted chatHistory in Firestore, fallback to questions
     const buildInitialMessages = (): Message[] => {
-        const msgs: Message[] = [];
-        if (meal.questions) {
-            msgs.push({ role: 'ai', text: meal.questions });
+        if (meal.chatHistory && meal.chatHistory.length > 0) {
+            return meal.chatHistory;
         }
-        return msgs;
+        if (meal.questions) {
+            return [{ role: 'ai', text: meal.questions }];
+        }
+        return [];
     };
 
-    const [isOpen, setIsOpen] = useState(!!meal.questions);
+    const [isOpen, setIsOpen] = useState(!!meal.questions && !meal.chatHistory?.length);
     const [messages, setMessages] = useState<Message[]>(buildInitialMessages);
     const [input, setInput] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const bottomRef = useRef<HTMLDivElement>(null);
+
+    // Auto-open if there's an AI question pending
+    useEffect(() => {
+        if (meal.questions) setIsOpen(true);
+    }, [meal.questions]);
+
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        if (isOpen) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isOpen]);
 
     const sendMessage = async (text: string) => {
         if (!text.trim() || isSubmitting) return;
@@ -54,13 +64,16 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
             if (!res.ok) throw new Error('Failed to clarify');
             const aiData = await res.json();
 
-            // Add AI response to chat
-            if (aiData.message) {
-                setMessages(prev => [...prev, { role: 'ai', text: aiData.message }]);
-            }
+            const aiMsg: Message = {
+                role: 'ai',
+                text: aiData.message || '承知しました。栄養データを更新しました。'
+            };
+            const finalMessages = [...newMessages, aiMsg];
+            setMessages(finalMessages);
 
-            // Update nutrition if changed
+            // Save chat history and updated nutrition to Firestore
             await updateMealRecord(meal.id, {
+                chatHistory: finalMessages,
                 nutritionalData: {
                     calories: aiData.calories ?? meal.nutritionalData.calories,
                     protein: aiData.protein ?? meal.nutritionalData.protein,
@@ -70,13 +83,17 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
                     fiber: aiData.fiber ?? meal.nutritionalData.fiber,
                 },
                 status: aiData.questions ? 'needs_clarification' : 'confirmed',
-                questions: aiData.questions,
+                questions: aiData.questions ?? null,
             });
 
+            // Only dispatch event to update summary (don't reload meals list = no remount)
+            window.dispatchEvent(new Event('mealUpdated'));
             onComplete();
+
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, { role: 'ai', text: 'エラーが発生しました。もう一度お試しください。' }]);
+            const errMsg: Message = { role: 'ai', text: 'エラーが発生しました。もう一度お試しください。' };
+            setMessages(prev => [...prev, errMsg]);
         } finally {
             setIsSubmitting(false);
         }
@@ -87,24 +104,31 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
         sendMessage(input);
     };
 
+    const hasMessages = messages.length > 0;
+    const hasPendingQuestion = meal.questions && !meal.chatHistory?.some(m => m.role === 'user');
+
     return (
-        <div className="rounded-xl border border-teal-100 overflow-hidden">
+        <div className="rounded-xl border border-slate-200 overflow-hidden">
             {/* Toggle Button */}
             <button
                 onClick={() => setIsOpen(o => !o)}
-                className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-colors ${meal.questions
+                className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-colors ${hasPendingQuestion
                         ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                        : 'bg-teal-50 text-teal-700 hover:bg-teal-100'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
             >
                 <div className="flex items-center gap-2">
-                    {meal.questions ? (
+                    {hasPendingQuestion ? (
                         <Sparkles className="w-4 h-4 text-amber-500" />
                     ) : (
                         <MessageCircle className="w-4 h-4 text-teal-500" />
                     )}
                     <span>
-                        {meal.questions ? 'AIから質問があります' : 'AIに質問する'}
+                        {hasPendingQuestion
+                            ? 'AIから質問があります'
+                            : hasMessages
+                                ? `チャット履歴（${messages.length}件）`
+                                : 'AIに質問する'}
                     </span>
                 </div>
                 {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -115,7 +139,7 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
                 <div className="bg-white border-t border-slate-100">
                     {/* Messages */}
                     {messages.length > 0 && (
-                        <div className="flex flex-col gap-2 p-3 max-h-60 overflow-y-auto">
+                        <div className="flex flex-col gap-2 p-3 max-h-64 overflow-y-auto">
                             {messages.map((msg, i) => (
                                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
@@ -143,6 +167,7 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
                                     </div>
                                 </div>
                             )}
+                            <div ref={bottomRef} />
                         </div>
                     )}
 
@@ -152,7 +177,7 @@ export default function ClarificationChat({ meal, onComplete }: Props) {
                             type="text"
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            placeholder="例：カロリーは合ってますか？量を半分にしました"
+                            placeholder="例：カロリーは合ってますか？ / 半分だけ食べました"
                             disabled={isSubmitting}
                             className="flex-1 text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:bg-white disabled:opacity-50 transition-all"
                         />

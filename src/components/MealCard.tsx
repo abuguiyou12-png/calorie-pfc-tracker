@@ -1,9 +1,10 @@
 'use client';
 
-import { Edit2, Image as ImageIcon, Trash2, X, Check } from 'lucide-react';
+import { Edit2, Image as ImageIcon, Trash2, X, Check, Camera } from 'lucide-react';
 import ClarificationChat from './ClarificationChat';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { MealRecord, updateMealRecord, deleteMealRecord } from '@/lib/db/meals';
+import { uploadMealImage, fileToBase64 } from '@/lib/storage';
 
 type Props = {
     mealType: string;
@@ -25,11 +26,29 @@ export default function MealCard({ mealType, meal, onEdit, onUpdate }: Props) {
     const [editCarbs, setEditCarbs] = useState(meal.nutritionalData.carbs);
     const [editSalt, setEditSalt] = useState(meal.nutritionalData.salt);
 
+    // Photo state for adding/changing photo in edit mode
+    const [newPhoto, setNewPhoto] = useState<File | null>(null);
+    const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(meal.imageUrl || null);
+    const photoInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = e.target.files?.[0];
+        if (f) {
+            setNewPhoto(f);
+            setNewPhotoPreview(URL.createObjectURL(f));
+        }
+    };
+
     const handleSave = async () => {
         setIsSaving(true);
         try {
+            let imageUrl = meal.imageUrl || '';
+            if (newPhoto) {
+                imageUrl = await uploadMealImage(newPhoto, meal.id + '_edit');
+            }
             await updateMealRecord(meal.id, {
                 name: editName,
+                imageUrl,
                 nutritionalData: {
                     calories: Number(editCalories),
                     protein: Number(editProtein),
@@ -71,6 +90,33 @@ export default function MealCard({ mealType, meal, onEdit, onUpdate }: Props) {
                     <button onClick={() => setIsEditing(false)} className="p-1 text-slate-400 hover:text-slate-600">
                         <X className="w-4 h-4" />
                     </button>
+                </div>
+
+                {/* Photo section */}
+                <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={photoInputRef}
+                    onChange={handlePhotoChange}
+                />
+                <div
+                    onClick={() => photoInputRef.current?.click()}
+                    className="relative w-full h-36 rounded-xl overflow-hidden border-2 border-dashed border-slate-200 bg-white cursor-pointer hover:border-teal-400 transition-colors group"
+                >
+                    {newPhotoPreview ? (
+                        <>
+                            <img src={newPhotoPreview} alt="Preview" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-all" />
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full gap-1 text-slate-400 group-hover:text-teal-500">
+                            <Camera className="w-6 h-6" />
+                            <p className="text-xs font-medium">写真を追加</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -176,7 +222,8 @@ export default function MealCard({ mealType, meal, onEdit, onUpdate }: Props) {
                     </div>
                 </div>
             </div>
-            <div className="mt-3">
+
+            <div className="mt-1">
                 <ClarificationChat meal={meal} onComplete={onUpdate} />
             </div>
         </div>

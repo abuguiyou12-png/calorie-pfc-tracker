@@ -29,6 +29,7 @@ export type MealRecord = {
     nutritionalData: NutritionalData;
     status: 'analyzing' | 'needs_clarification' | 'confirmed';
     questions?: string;
+    chatHistory?: { role: 'ai' | 'user'; text: string }[];
     createdAt: number;
 };
 
