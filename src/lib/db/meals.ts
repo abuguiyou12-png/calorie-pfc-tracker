@@ -7,6 +7,7 @@ import {
     getDocs,
     query,
     where,
+    deleteDoc,
 } from 'firebase/firestore';
 
 export type NutritionalData = {
@@ -39,6 +40,11 @@ export async function saveMealRecord(meal: MealRecord) {
 export async function updateMealRecord(id: string, updates: Partial<MealRecord>) {
     const mealRef = doc(db, 'meals', id);
     await updateDoc(mealRef, updates);
+}
+
+export async function deleteMealRecord(id: string) {
+    const mealRef = doc(db, 'meals', id);
+    await deleteDoc(mealRef);
 }
 
 export async function getMealsByDate(date: string): Promise<MealRecord[]> {

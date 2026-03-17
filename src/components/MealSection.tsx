@@ -44,7 +44,7 @@ export default function MealSection({ mealType, title, selectedDate }: MealSecti
         <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-700">{title}</h3>
-                {!hasMeal && !isUploading && (
+                {!isUploading && (
                     <button
                         onClick={() => setIsUploading(true)}
                         className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-3 py-1.5 rounded-full transition-colors"
